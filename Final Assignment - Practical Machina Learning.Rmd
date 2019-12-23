@@ -1,0 +1,117 @@
+---
+title: "Final assignment - Practical Machine Learning"
+author: "Twan"
+date: "23-12-2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install_load <- function (package1, ...){   
+  packages <- c(package1, ...)
+  for(package in packages){
+    if(package %in% rownames(installed.packages()))
+      do.call('library', list(package))
+    else {
+      install.packages(package)
+      do.call("library", list(package))
+    }
+  } 
+}
+```
+
+### Set seed & install/load packages
+```{r test, results="hide"}
+set.seed(1337)
+install_load("caret","randomForest","rpart","e1071")
+```
+
+# Human activitiy recognitions, predictive analytics based on wearable accelerometers data
+
+##Load data
+```{r load}
+df_test <- read.csv(file = "data/pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+df_train <- read.csv(file = "data/pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+Create training and validation set
+```{r split}
+trainingset <- createDataPartition(y=df_train$classe, p=0.6, list=FALSE)
+df_train2 <- df_train[trainingset, ]; 
+validation <- df_train[-trainingset, ]
+```
+
+## Cleaning data
+Delete columns with less information
+```{r clean1}
+nearZeroVariance = nearZeroVar(df_train2, saveMetrics=TRUE)
+col_nearZeroVariance = nearZeroVar(df_train2, saveMetrics=FALSE)
+df_train2 = df_train2[,-col_nearZeroVariance]
+```
+
+Delete first ID column 
+```{r clean2}
+df_train2 = df_train2[,-1]
+```
+
+Replace NA's with 0 values
+```{r clean3}
+df_train2[is.na(df_train2)] = 0
+```
+
+Perform same transformation for test dataset and validation dataset
+```{r clean-test}
+## Delete columns in test and validation
+df_test$classe = 0
+df_test = df_test[,colnames(df_train2)]
+validation = validation[,colnames(df_train2)]
+
+## Clean data of NA
+df_test[is.na(df_test)] = 0
+validation[is.na(validation)] = 0
+```
+Strange difference in column types testset fix and check
+```{r fixtest}
+df_test$magnet_dumbbell_z = as.numeric(df_test$magnet_dumbbell_z)
+df_test$magnet_forearm_y = as.numeric(df_test$magnet_forearm_y  )
+df_test$magnet_forearm_z = as.numeric(df_test$magnet_forearm_z)
+df_test$classe  = as.factor(df_test$classe)
+
+testframe = data.frame(sapply(df_test,class),sapply(df_train2,class))
+testframe[which(testframe$sapply.df_test..class. != testframe$sapply.df_train2..class.),]
+```
+
+## Model creation Tree
+Create random forest and predict testing set
+```{r tree1}
+tree1 <- rpart(classe ~ ., data=df_train2, method="class")
+pred_tree1 <- predict(tree1, validation, type = "class")
+```
+Check confusion matrix to see model performance
+```{r tree2}
+confusionMatrix(pred_tree1, validation$classe)
+```
+## Model creation Forest
+Create random forrest and predict classe variable
+```{r forest1}
+forest1 <- randomForest(classe ~. , data=df_train2)
+pred_forest1 <- predict(forest1, validation, type = "class")
+```
+Check confusion matrix to see model performance
+```{r forest2}
+confusionMatrix(pred_forest1, validation$classe)
+```
+
+## Results discussion
+The results show that the random forrest is more accurate compared to the decision tree. The decision tree shows an accuracy of 89% where the random forrest reaches near perfect (99%) accuracy on the validation set. Given the performance of the model on the validation set, I do expect an accuracy between 97.5% and 100% on the out of sample test (1 or 0 wrong predictions). The validation set was constructed as 40% of the total training set to test performance before predicting the test set. This is a form of cross validation for the random forrest model. This validation can be improved by using K-fold cross validation which uses multiple mode estimations, together with different subsets to learn as much about the correlations in the dataset. 
+
+Save test data
+Output for the test set
+```{r testoutput}
+#trick to force column to have same data types (add row & delete row of validation to test)
+df_test2 = rbind(validation[1,],df_test)
+df_test2 = df_test2[-1,]
+#results
+test_results = predict(forest1, df_test2, type="class")
+test_results
+```
